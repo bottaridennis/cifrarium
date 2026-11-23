@@ -8,6 +8,10 @@
 <script>
 try { const t = localStorage.getItem('cifrarium_theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
 </script>
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0d0f1a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&display=swap">
@@ -16,7 +20,7 @@ try { const t = localStorage.getItem('cifrarium_theme'); if (t === 'light' || t 
 <body>
 <div class="wrap">
   <header class="top">
-    <a class="brand" href="#oggi">Cifrarium <small>0 – 1.000.000</small></a>
+    <a class="brand" href="#oggi"><img class="logo" src="logo.svg" alt="" width="34" height="34">Cifrarium <small>0 – 1.000.000</small></a>
     <div class="actions">
       <a href="#amici" class="pill-link" id="bell" title="Richieste di amicizia" hidden>Richieste <span class="count" id="bell-count">0</span></a>
       <button class="btn ghost" id="btn-account">Accedi con Google</button>

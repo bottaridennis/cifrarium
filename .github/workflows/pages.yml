@@ -32,7 +32,7 @@ jobs:
             exit 1
           fi
           mkdir -p _site
-          cp index.html app.js game.js social.js style.css _site/
+          cp index.html app.js game.js social.js style.css logo.svg apple-touch-icon.png icon-512.png manifest.webmanifest _site/
           node -e '
             const c = JSON.parse(process.env.FIREBASE_CONFIG);
             require("fs").writeFileSync("_site/firebase-config.js", "export const firebaseConfig = " + JSON.stringify(c) + ";\n");
