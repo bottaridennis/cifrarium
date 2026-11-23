@@ -2,6 +2,7 @@
 import {
   MAX, N, TIERS, fmt, BADGES, NB, IDX, hits, buildStats, score, pctTxt, rollNumber, EP, BTIER, COUNTS, store
 } from './game.js';
+import * as fx from './fx.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -54,6 +55,8 @@ function makeReels(el) {
       const anim = animate && !reduce;
       let maxT = 0;
       paint(anim ? null : tier);
+      el.classList.remove('hot', 'mythic');
+      if (anim) el.classList.add('spinning');
       reels.forEach((o, i) => {
         const d = +s[i];
         o.r.classList.toggle('dim', i < lead);
@@ -63,8 +66,10 @@ function makeReels(el) {
         const t = 700 + i * 170; maxT = t;
         o.st.style.transition = `transform ${t}ms cubic-bezier(.15,.75,.2,1)`;
         o.st.style.transform = pos(20 + d); o.d = d;
+        o.r.classList.remove('land');
+        setTimeout(() => { o.r.classList.add('land'); setTimeout(() => o.r.classList.remove('land'), 400); }, t - 60);
       });
-      return new Promise(r => setTimeout(() => { paint(tier); r(); }, anim ? maxT + 50 : 0));
+      return new Promise(r => setTimeout(() => { el.classList.remove('spinning'); paint(tier); r(); }, anim ? maxT + 50 : 0));
     }
   };
 }
@@ -129,7 +134,7 @@ async function revealBadges(el, sc, items, runId) {
     li.classList.add('enter');
     ul.prepend(li);
     const t = BTIER[it.i];
-    if (t >= 4) li.classList.add('rare-hit');
+    if (t >= 4) { li.classList.add('rare-hit'); setTimeout(() => fx.burst(li.querySelector('.bcard'), t), 180); }
     const lits = [...li.querySelectorAll('.digits span.on')];
     li.querySelectorAll('.digits span.on').forEach(s => s.classList.add('wait'));
     await pause(260);
@@ -201,6 +206,7 @@ async function doDaily() {
     catch (e) { $('btn-daily').disabled = false; toast('Tiro non salvato: ' + errMsg(e)); return; }
   } else { localDaily[today] = n; store.set(DAILY_KEY, localDaily); }
   await reelsDaily.set(n, true, sc.tier);
+  fx.celebrate($('reels-daily'), sc.tier);
   $('btn-daily').disabled = false;
   renderDaily(true, true); renderCollection();
 }
@@ -254,7 +260,7 @@ function showTrain(sc, label, fresh, animate) {
 }
 async function trainRoll(animate) {
   const n = rollNumber(), sc = score(n);
-  if (animate) { $('btn-train').disabled = true; await reelsTrain.set(n, true, sc.tier); $('btn-train').disabled = false; }
+  if (animate) { $('btn-train').disabled = true; await reelsTrain.set(n, true, sc.tier); fx.celebrate($('reels-train'), sc.tier); $('btn-train').disabled = false; }
   else reelsTrain.set(n, false, sc.tier);
   const fresh = recordTrain(sc);
   showTrain(sc, `Tiro n. ${fmt(train.rolls)}`, fresh, animate);
@@ -358,6 +364,7 @@ async function onLike(btn) {
   btn.disabled = true;
   try {
     await S.toggleLike(r.id, liked);
+    if (!liked) fx.hearts(btn);
     r.likedBy = liked ? r.likedBy.filter(x => x !== user.uid) : [...(r.likedBy || []), user.uid];
     btn.outerHTML = heart(r);
   } catch (e) { toast(errMsg(e)); btn.disabled = false; }
@@ -377,18 +384,18 @@ async function renderBoard() {
     if (period === 'today') {
       const list = await S.rankToday(dayKey(), uids);
       list.forEach(r => { rollCache[r.id] = r; });
-      rows = list.map((r, i) => `<li class="${user && r.uid === user.uid ? 'mine' : ''}">${medal(i)}
+      rows = list.map((r, i) => `<li style="--i:${Math.min(i, 20)}" class="${user && r.uid === user.uid ? 'mine' : ''}">${medal(i)}
         <span class="who">${nameTag(r.username, r.color, r.fav)}${user && r.uid === user.uid ? ' <span class="muted">(tu)</span>' : ''}</span>
         <button class="numbtn" data-n="${r.n}" title="Vedi i badge">${numChip(r.n, r.tier)}</button><span class="pts">${fmt(r.total)} pt</span>${heart(r)}</li>`).join('');
     } else if (period === 'week') {
       const list = await S.rankWeek(weekStart(), uids);
-      rows = list.map((u, i) => `<li class="${user && u.uid === user.uid ? 'mine' : ''}">${medal(i)}
+      rows = list.map((u, i) => `<li style="--i:${Math.min(i, 20)}" class="${user && u.uid === user.uid ? 'mine' : ''}">${medal(i)}
         <span class="who">${nameTag(u.username, u.color, u.fav)} <span class="muted">· ${u.days} ${u.days === 1 ? 'tiro' : 'tiri'}</span></span>
         <button class="numbtn" data-n="${u.best.n}" title="Miglior tiro della settimana">${numChip(u.best.n, u.best.tier)}</button><span class="pts">${fmt(u.total)} pt</span></li>`).join('');
     } else {
       const field = period === 'all' ? 'lifetime' : 'badgeCount';
       const list = await S.rankUsers(field, uids);
-      rows = list.filter(u => u.username).map((u, i) => `<li class="${user && u.uid === user.uid ? 'mine' : ''}">${medal(i)}
+      rows = list.filter(u => u.username).map((u, i) => `<li style="--i:${Math.min(i, 20)}" class="${user && u.uid === user.uid ? 'mine' : ''}">${medal(i)}
         <span class="who">${nameTag(u.username, u.color, u.fav)} <span class="muted">· ${fmt(u.rolls || 0)} tiri</span></span>
         <span class="pts">${period === 'all' ? fmt(u.lifetime || 0) + ' pt' : (u.badgeCount || 0) + ' / ' + NB + ' badge'}</span></li>`).join('');
     }
@@ -406,7 +413,7 @@ async function renderFeed() {
   try {
     const list = await S.feed(scope === 'friends' ? [user.uid, ...friendUids] : null);
     list.forEach(r => { rollCache[r.id] = r; });
-    el.innerHTML = list.map(r => `<article class="fcard t${r.tier}">
+    el.innerHTML = list.map((r, i) => `<article class="fcard t${r.tier}" style="--i:${Math.min(i, 20)}">
       <div class="fhead"><span>${nameTag(r.username, r.color, r.fav)}</span><span class="muted">${ago(r.createdAt)}</span></div>
       <div class="fbody"><button class="numbtn" data-n="${r.n}" title="Vedi i badge">${numChip(r.n, r.tier)}</button>
         <div><div class="ftier">${TIERS[r.tier]} · Top ${pctTxt(r.top)}</div><div class="pts">${fmt(r.total)} pt</div></div></div>
@@ -597,6 +604,7 @@ function route(force) {
 
 /* ---------- Avvio ---------- */
 async function start() {
+  fx.ambient(); fx.tilt('.gb');
   applyTheme((() => { try { return localStorage.getItem('cifrarium_theme') || 'system'; } catch (e) { return 'system'; } })());
   reelsDaily = makeReels($('reels-daily'));
   reelsTrain = makeReels($('reels-train'));
