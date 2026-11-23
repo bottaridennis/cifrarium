@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isMe(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // Profili pubblici: chiunque li legge, solo il proprietario li scrive.
+    match /users/{uid} {
+      allow read: if true;
+      allow create: if isMe(uid)
+        && request.resource.data.username is string
+        && request.resource.data.username.matches('^[A-Za-z0-9_]{3,20}$')
+        && request.resource.data.usernameLower == request.resource.data.username.lower()
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.usernameLower)).data.uid == uid;
+      allow update: if isMe(uid)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['username', 'usernameLower', 'friendCode', 'createdAt']);
+      allow delete: if isMe(uid);
+    }
+
+    // Nomi utente unici.
+    match /usernames/{name} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+        && name.matches('^[a-z0-9_]{3,20}$');
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // Un tiro al giorno per utente: l'id è uid_data e non si può riscrivere.
+    match /rolls/{rid} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && rid == request.auth.uid + '_' + request.resource.data.date
+        && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && request.resource.data.n is int && request.resource.data.n >= 0 && request.resource.data.n <= 1000000
+        && request.resource.data.likedBy == []
+        && request.resource.data.createdAt == request.time;
+      // Gli altri possono solo aggiungere o togliere il proprio like.
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy'])
+        && (
+          (request.resource.data.likedBy.toSet().difference(resource.data.likedBy.toSet()) == [request.auth.uid].toSet()
+            && resource.data.likedBy.toSet().difference(request.resource.data.likedBy.toSet()).size() == 0)
+          ||
+          (resource.data.likedBy.toSet().difference(request.resource.data.likedBy.toSet()) == [request.auth.uid].toSet()
+            && request.resource.data.likedBy.toSet().difference(resource.data.likedBy.toSet()).size() == 0)
+        );
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // Richieste di amicizia: id = mittente_destinatario.
+    match /friendRequests/{rid} {
+      allow read: if signedIn() && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.from == request.auth.uid
+        && rid == request.auth.uid + '_' + request.resource.data.to
+        && request.resource.data.to != request.auth.uid;
+      allow delete: if signedIn() && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+    }
+
+    // Amicizie: si creano solo accettando una richiesta ricevuta.
+    match /friendships/{fid} {
+      allow read: if signedIn() && request.auth.uid in resource.data.members;
+      allow create: if signedIn()
+        && request.resource.data.members.size() == 2
+        && request.resource.data.members[1] == request.auth.uid
+        && fid in [request.resource.data.members[0] + '_' + request.auth.uid, request.auth.uid + '_' + request.resource.data.members[0]]
+        && exists(/databases/$(database)/documents/friendRequests/$(request.resource.data.members[0] + '_' + request.auth.uid));
+      allow delete: if signedIn() && request.auth.uid in resource.data.members;
+    }
+  }
+}

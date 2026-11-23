@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cifrarium</title>
+<meta name="description" content="Un numero al giorno da 0 a 1.000.000: badge, rarità, classifiche e allenamento a tiri illimitati.">
+<script>
+try { const t = localStorage.getItem('cifrarium_theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#oggi">Cifrarium <small>0 – 1.000.000</small></a>
+    <div class="actions">
+      <a href="#amici" class="pill-link" id="bell" title="Richieste di amicizia" hidden>Richieste <span class="count" id="bell-count">0</span></a>
+      <button class="btn ghost" id="btn-account">Accedi con Google</button>
+    </div>
+    <nav class="tabs" aria-label="Sezioni">
+      <a href="#oggi" data-view="oggi">Oggi</a>
+      <a href="#allenamento" data-view="allenamento">Allenamento</a>
+      <a href="#classifica" data-view="classifica">Classifica</a>
+      <a href="#feed" data-view="feed">Feed</a>
+      <a href="#amici" data-view="amici">Amici</a>
+      <a href="#collezione" data-view="collezione">Collezione</a>
+      <a href="#info" data-view="info">Come funziona</a>
+      <a href="#impostazioni" data-view="impostazioni">Impostazioni</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="loading" class="panel loading">
+      <p class="eyebrow">Preparazione</p>
+      <p>Analizzo tutti i 1.000.001 numeri possibili per calcolare la rarità di ogni badge…</p>
+      <div class="progress"><i id="prog"></i></div>
+      <p class="muted" style="font-size:.85rem">Succede solo la prima volta, poi il risultato resta salvato nel browser.</p>
+    </section>
+
+    <!-- SCELTA NOME UTENTE -->
+    <section id="view-setup" data-v="setup" hidden>
+      <div class="panel">
+        <div><p class="eyebrow">Ultimo passo</p><h1>Scegli il tuo nome utente</h1></div>
+        <p class="muted">Gli altri giocatori lo vedranno in classifica e nel feed. Da 3 a 20 caratteri: lettere, numeri e trattino basso. Non si può cambiare dopo.</p>
+        <form class="row" id="form-setup">
+          <input type="text" id="setup-name" maxlength="20" autocomplete="nickname" placeholder="es. dado_matto" aria-label="Nome utente">
+          <button class="btn" type="submit">Conferma</button>
+        </form>
+        <p class="error" id="setup-err" hidden></p>
+      </div>
+    </section>
+
+    <!-- OGGI -->
+    <section id="view-oggi" data-v="oggi" hidden>
+      <div class="panel">
+        <div class="row spread">
+          <div>
+            <p class="eyebrow" id="today-label"></p>
+            <h1>Il tuo numero di oggi</h1>
+          </div>
+          <div class="stat" style="min-width:110px"><div class="k">Serie</div><div class="v" id="streak">0 giorni</div></div>
+        </div>
+        <p class="note" id="guest-note" hidden>Stai giocando senza account: il tiro resta solo in questo browser e non entra in classifica. <button class="linklike" id="guest-login">Accedi con Google</button></p>
+        <div class="reels" id="reels-daily"></div>
+        <button class="btn big-roll" id="btn-daily">Tira il numero di oggi</button>
+        <div id="daily-result" hidden></div>
+      </div>
+    </section>
+
+    <!-- ALLENAMENTO -->
+    <section id="view-allenamento" data-v="allenamento" hidden>
+      <div class="panel">
+        <div>
+          <p class="eyebrow">Tiri illimitati · non contano per classifica e collezione</p>
+          <h1>Allenamento</h1>
+        </div>
+        <div class="reels" id="reels-train"></div>
+        <div class="row">
+          <button class="btn" id="btn-train" style="flex:1 1 160px">Tira</button>
+          <button class="btn ghost" id="btn-auto">Avvia tiro automatico</button>
+        </div>
+        <div class="row">
+          <label class="field">Fermati quando esce
+            <select id="stop-at">
+              <option value="7">Mai (lo fermo io)</option>
+              <option value="3">Raro o meglio</option>
+              <option value="4" selected>Epico o meglio</option>
+              <option value="5">Anomalia o meglio</option>
+              <option value="6">Mitico</option>
+              <option value="badge">Un badge mai visto</option>
+            </select>
+          </label>
+          <label class="field">Velocità
+            <select id="speed">
+              <option value="250">Lenta</option>
+              <option value="60" selected>Veloce</option>
+              <option value="0">Massima</option>
+            </select>
+          </label>
+          <label class="row check"><input type="checkbox" id="anim" checked> Animazione bobine nei tiri singoli</label>
+        </div>
+        <p class="eyebrow" id="train-label">Premi Tira, o la barra spaziatrice</p>
+        <div id="train-result"></div>
+      </div>
+
+      <div class="panel">
+        <div class="row spread">
+          <h2>Statistiche di allenamento</h2>
+          <div id="reset-zone"><button class="btn ghost danger" id="btn-reset">Azzera</button></div>
+        </div>
+        <div class="stats" id="train-stats"></div>
+        <div class="dist" id="train-dist"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Analizza un numero</h2>
+        <form class="row" id="form-analyze">
+          <input type="number" id="analyze-n" min="0" max="1000000" step="1" placeholder="123456" aria-label="Numero da analizzare">
+          <button class="btn ghost" type="submit">Analizza</button>
+          <span class="muted" style="font-size:.85rem">Non conta come tiro.</span>
+        </form>
+      </div>
+
+      <div class="panel">
+        <div class="row spread"><h2>Ultimi tiri</h2><span class="muted" style="font-size:.85rem">Tocca un tiro per rivederlo</span></div>
+        <ul class="history" id="train-history"></ul>
+      </div>
+    </section>
+
+    <!-- CLASSIFICA -->
+    <section id="view-classifica" data-v="classifica" hidden>
+      <div class="panel">
+        <div class="row spread">
+          <h1>Classifica</h1>
+          <div class="seg" role="group" aria-label="Chi" id="lb-scope">
+            <button data-v="global" aria-pressed="true">Tutti</button>
+            <button data-v="friends" aria-pressed="false">Amici</button>
+          </div>
+        </div>
+        <div class="seg wide" role="group" aria-label="Periodo" id="lb-period">
+          <button data-v="today" aria-pressed="true">Oggi</button>
+          <button data-v="week" aria-pressed="false">Settimana</button>
+          <button data-v="all" aria-pressed="false">Sempre</button>
+          <button data-v="badges" aria-pressed="false">Badge</button>
+        </div>
+        <ol class="board" id="lb-list"></ol>
+      </div>
+    </section>
+
+    <!-- FEED -->
+    <section id="view-feed" data-v="feed" hidden>
+      <div class="panel">
+        <div class="row spread">
+          <h1>Feed</h1>
+          <div class="seg" role="group" aria-label="Chi" id="feed-scope">
+            <button data-v="global" aria-pressed="true">Tutti</button>
+            <button data-v="friends" aria-pressed="false">Amici</button>
+          </div>
+        </div>
+        <div class="feed" id="feed-list"></div>
+      </div>
+    </section>
+
+    <!-- AMICI -->
+    <section id="view-amici" data-v="amici" hidden>
+      <div class="panel">
+        <h1>Amici</h1>
+        <div class="seg wide" role="group" aria-label="Sezione" id="fr-tab">
+          <button data-v="list" aria-pressed="true">Amici</button>
+          <button data-v="requests" aria-pressed="false">Richieste</button>
+          <button data-v="code" aria-pressed="false">Il mio codice</button>
+          <button data-v="search" aria-pressed="false">Cerca</button>
+        </div>
+        <div id="fr-body"></div>
+      </div>
+    </section>
+
+    <!-- COLLEZIONE -->
+    <section id="view-collezione" data-v="collezione" hidden>
+      <div class="panel">
+        <div class="row spread">
+          <div>
+            <p class="eyebrow" id="coll-count"></p>
+            <h1>Collezione badge</h1>
+          </div>
+          <div class="seg" role="group" aria-label="Fonte">
+            <button id="src-daily" aria-pressed="true">Tiri giornalieri</button>
+            <button id="src-train" aria-pressed="false">Allenamento</button>
+          </div>
+        </div>
+        <div class="grid-badges" id="coll-grid"></div>
+      </div>
+      <div class="panel">
+        <h2>Storico giornaliero</h2>
+        <ul class="history" id="daily-history"></ul>
+      </div>
+    </section>
+
+    <!-- IMPOSTAZIONI -->
+    <section id="view-impostazioni" data-v="impostazioni" hidden>
+      <div class="panel settings">
+        <h1>Impostazioni</h1>
+        <div class="set-block">
+          <h2>Aspetto</h2>
+          <div class="seg wide" role="group" aria-label="Tema" id="theme-seg">
+            <button data-v="light" aria-pressed="false">Chiaro</button>
+            <button data-v="system" aria-pressed="true">Sistema</button>
+            <button data-v="dark" aria-pressed="false">Scuro</button>
+          </div>
+        </div>
+        <div id="settings-account" class="settings"></div>
+      </div>
+    </section>
+
+    <!-- INFO -->
+    <section id="view-info" data-v="info" hidden>
+      <div class="panel prose">
+        <h1>Come funziona</h1>
+        <p>Ogni giorno hai un solo tiro: esce un numero casuale da 0 a 1.000.000. Il numero viene analizzato e guadagna badge per le sue proprietà (primo, palindromo, cifre ripetute, numeri famosi e altro). Ogni badge vale punti in base a quanto è raro, e sotto ogni badge vedi evidenziate le cifre che lo hanno fatto scattare.</p>
+        <p>Con un account Google il tiro entra nella classifica del giorno, della settimana e di sempre, compare nel feed, e puoi aggiungere amici con il loro codice o cercandoli per nome.</p>
+        <p>In <b>Allenamento</b> puoi tirare quante volte vuoi, lanciare tiri automatici che si fermano quando esce qualcosa di raro, e analizzare qualsiasi numero.</p>
+        <h2>Punti e rarità del tiro</h2>
+        <p>Un badge che esce in una frazione <i>p</i> di tutti i numeri vale <span style="font-family:var(--f-mono)">100 ÷ p</span> punti: un badge da 1 numero su 2 vale 200 punti, uno da 1 su 10.000 vale 1.000.000. Se un badge ne include un altro (un Tris include sempre una Doppietta), conta solo il più raro e l'altro compare sotto come incluso. Il numero si colora in base al suo Top %: la quota di numeri possibili che fanno almeno i tuoi punti.</p>
+        <div style="overflow-x:auto"><table class="tiers" id="tiers-table"></table></div>
+        <h2>Rarità dei badge</h2>
+        <div style="overflow-x:auto"><table class="tiers" id="btiers-table"></table></div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
