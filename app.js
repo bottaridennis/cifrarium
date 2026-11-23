@@ -74,26 +74,75 @@ function digitsRow(s, hl) {
   const on = new Set(hl);
   return '<div class="digits" aria-hidden="true">' + [...s].map((c, i) => `<span${on.has(i) ? ' class="on"' : ''}>${c}</span>`).join('') + '</div>';
 }
+const REDUCE_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 function renderResult(el, sc, opts = {}) {
   const fresh = opts.fresh || new Set();
-  const cards = sc.cards.map(({ i, hl, kids }) => {
+  const animate = !!opts.animate && !REDUCE_MOTION;
+  const runId = (el._run = (el._run || 0) + 1);   // un nuovo risultato interrompe l'animazione precedente
+  const items = sc.cards.map(({ i, hl, kids }) => {
     const [id, name, desc] = BADGES[i], t = BTIER[i];
     const odds = Math.max(1, Math.round(N / COUNTS[i]));
     const sub = kids.map(j => `<div class="subline t${BTIER[j]}"><span>└ <b>${BADGES[j][1]}</b></span><span>incluso${fresh.has(BADGES[j][0]) ? ' · nuovo' : ''}</span></div>`).join('');
-    return `<li style="display:grid;gap:6px"><div class="bcard t${t}">
+    return { i, html: `<li class="bitem"><div class="bcard t${t}">
       <div class="b-head"><span class="b-name">${name}</span><span class="tag">${TIERS[t]}</span>${fresh.has(id) ? '<span class="tag new">Nuovo</span>' : ''}<span class="b-pts">+${fmt(EP[i])} pt</span></div>
       <div class="b-desc">${desc} <span class="b-odds">· 1 numero su ${fmt(odds)}</span></div>
-      ${digitsRow(sc.s, hl)}</div>${sub}</li>`;
-  }).join('');
-  el.innerHTML = `<div style="display:grid;gap:18px">
+      ${digitsRow(sc.s, hl)}</div>${sub}</li>` };
+  });
+  el.innerHTML = `<div class="result${animate ? ' revealing' : ''}" style="display:grid;gap:18px">
     <div class="verdict t${sc.tier}">
       <div class="line"><span class="tier-pill">${TIERS[sc.tier]}</span><span class="top-pct">Top ${pctTxt(sc.topFrac)}</span></div>
-      <span class="ep-big">${fmt(sc.total)} pt</span>
+      <span class="ep-big"><span class="ep-num">${fmt(animate ? 0 : sc.total)}</span> pt</span>
       ${opts.life != null ? `<span class="ep-life">${fmt(opts.life)} pt<small>${opts.lifeLabel || 'Punti totali'}</small></span>` : ''}
     </div>
     ${opts.after || ''}
-    <div class="section-title"><h2>Badge ottenuti</h2><span class="muted" style="font-size:.85rem">${sc.earned.length} badge · ${sc.cards.length} contano per i punti</span></div>
-    <ul class="badges">${cards}</ul></div>`;
+    <div class="section-title"><h2>Badge ottenuti</h2><span class="muted" style="font-size:.85rem"><span class="b-count">${animate ? 0 : sc.cards.length}</span> di ${sc.cards.length} contano per i punti · ${sc.earned.length} badge in tutto</span>
+      ${animate ? '<button class="linklike skip-anim">Mostra tutto subito</button>' : ''}</div>
+    <ul class="badges">${animate ? '' : items.map(x => x.html).join('')}</ul></div>`;
+  if (animate) revealBadges(el, sc, items, runId);
+}
+// I badge entrano uno alla volta, dal più comune al più raro: ognuno arriva in cima alla lista,
+// le cifre che lo giustificano si accendono una per una e i punti salgono.
+async function revealBadges(el, sc, items, runId) {
+  const root = el.querySelector('.result'), ul = root.querySelector('ul.badges');
+  const num = root.querySelector('.ep-num'), count = root.querySelector('.b-count');
+  let skip = false, shown = 0, total = 0;
+  const alive = () => el._run === runId;
+  const skipBtn = root.querySelector('.skip-anim');
+  let wake = () => {};
+  const pause = ms => new Promise(r => { const h = setTimeout(r, ms); wake = () => { clearTimeout(h); r(); }; });
+  skipBtn.onclick = () => { skip = true; wake(); };
+  const countTo = async (from, to, ms) => {
+    const t0 = performance.now();
+    while (!skip && alive()) {
+      const k = Math.min(1, (performance.now() - t0) / ms);
+      num.textContent = fmt(from + (to - from) * (1 - Math.pow(1 - k, 3)));
+      if (k >= 1) return;
+      await new Promise(requestAnimationFrame);
+    }
+  };
+  await pause(250);
+  for (const it of [...items].reverse()) {
+    if (skip || !alive()) break;
+    const tmp = document.createElement('ul'); tmp.innerHTML = it.html;
+    const li = tmp.firstElementChild;
+    li.classList.add('enter');
+    ul.prepend(li);
+    const t = BTIER[it.i];
+    if (t >= 4) li.classList.add('rare-hit');
+    const lits = [...li.querySelectorAll('.digits span.on')];
+    li.querySelectorAll('.digits span.on').forEach(s => s.classList.add('wait'));
+    await pause(260);
+    for (const s of lits) { if (skip || !alive()) break; s.classList.remove('wait'); s.classList.add('pop'); await pause(lits.length > 4 ? 55 : 110); }
+    shown++; count.textContent = shown;
+    await countTo(total, total + EP[it.i], 380); total += EP[it.i];
+    await pause(220 + t * 140);
+  }
+  if (!alive()) return;
+  if (skip) ul.innerHTML = items.map(x => x.html).join('');
+  num.textContent = fmt(sc.total); count.textContent = sc.cards.length;
+  root.classList.remove('revealing'); root.classList.add('revealed');
+  skipBtn.remove();
 }
 const numChip = (n, tier) => `<span class="numchip t${tier}">${fmt(n)}</span>`;
 const nameTag = (name, color, fav) => `<span class="uname" style="color:${safeColor(color)}">${esc(name)}</span>${(fav || []).filter(id => IDX[id] != null).map(id => `<span class="favchip t${BTIER[IDX[id]]}">${BADGES[IDX[id]][1]}</span>`).join('')}`;
@@ -112,7 +161,7 @@ function streak() {
   while (d0[dayKey(d)] !== undefined) { s++; d.setDate(d.getDate() - 1); }
   return s;
 }
-function renderDaily(animateDone) {
+function renderDaily(animateDone, animateBadges) {
   const today = dayKey(), dd = daily(), n = dd[today];
   $('today-label').textContent = new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const st = streak(); $('streak').textContent = st + (st === 1 ? ' giorno' : ' giorni');
@@ -126,7 +175,7 @@ function renderDaily(animateDone) {
   const fresh = new Set(sc.earned.map(i => BADGES[i][0]).filter(id => !before.has(id)));
   let life = 0; for (const k in dd) life += score(dd[k]).total;
   renderResult($('daily-result'), sc, {
-    fresh, life, lifeLabel: 'I tuoi punti di sempre',
+    fresh, life, lifeLabel: 'I tuoi punti di sempre', animate: animateBadges,
     after: `<div class="row spread"><p class="muted">Prossimo tiro tra <span class="countdown" id="countdown"></span></p>
       <div class="row"><button class="btn ghost" id="btn-share">Copia risultato</button><a class="btn ghost" href="#allenamento" style="text-decoration:none">Vai all'allenamento</a></div></div>`
   });
@@ -153,7 +202,7 @@ async function doDaily() {
   } else { localDaily[today] = n; store.set(DAILY_KEY, localDaily); }
   await reelsDaily.set(n, true, sc.tier);
   $('btn-daily').disabled = false;
-  renderDaily(true); renderCollection();
+  renderDaily(true, true); renderCollection();
 }
 async function share() {
   const n = daily()[dayKey()]; if (n === undefined) return;
@@ -199,16 +248,16 @@ function renderTrainHistory() {
   $('train-history').innerHTML = train.history.length ? train.history.slice(0, 100).map(histItem).join('')
     : '<li class="muted" style="padding:6px 10px">Ancora nessun tiro. Premi Tira per iniziare.</li>';
 }
-function showTrain(sc, label, fresh) {
+function showTrain(sc, label, fresh, animate) {
   $('train-label').textContent = label;
-  renderResult($('train-result'), sc, { fresh, life: train.sum, lifeLabel: 'Punti totali di allenamento' });
+  renderResult($('train-result'), sc, { fresh, animate, life: train.sum, lifeLabel: 'Punti totali di allenamento' });
 }
 async function trainRoll(animate) {
   const n = rollNumber(), sc = score(n);
   if (animate) { $('btn-train').disabled = true; await reelsTrain.set(n, true, sc.tier); $('btn-train').disabled = false; }
   else reelsTrain.set(n, false, sc.tier);
   const fresh = recordTrain(sc);
-  showTrain(sc, `Tiro n. ${fmt(train.rolls)}`, fresh);
+  showTrain(sc, `Tiro n. ${fmt(train.rolls)}`, fresh, animate);
   return { sc, fresh };
 }
 function afterTrain() { renderTrainStats(); renderTrainHistory(); saveTrain(); }
