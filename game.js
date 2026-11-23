@@ -147,9 +147,10 @@ function hits(n) {
 }
 
 /* ---------- Statistiche su tutti i numeri ---------- */
-const STATS_KEY = 'cifrario_stats_v2';
-const BIN = t => Math.floor(Math.log10(Math.max(1, t)) * 200);
-let EP = [], BTIER = [], COUNTS = [], HIST = null, ABOVE = null;
+const STATS_KEY = 'cifrario_stats_v3';
+// Distribuzione esatta dei punteggi: TOTALS = punteggi distinti in ordine crescente,
+// AT_LEAST[i] = quanti numeri fanno almeno TOTALS[i] punti.
+let EP = [], BTIER = [], COUNTS = [], TOTALS = null, AT_LEAST = null;
 function badgeTier(p) { return p > .1 ? 1 : p > .01 ? 2 : p > .001 ? 3 : p > .0001 ? 4 : p > .00001 ? 5 : 6; }
 const epOf = c => c ? Math.round(100 * N / c) : 0;
 function topTotal(ids, ep) {
@@ -157,15 +158,15 @@ function topTotal(ids, ep) {
   for (const i of ids) { let covered = false; for (const j of ids) if (j !== i && CL[j].has(i)) { covered = true; break; } if (!covered) t += ep[i]; }
   return t;
 }
-function finish(counts, hist) {
+function finish(counts, totals, freq) {
   COUNTS = counts; EP = counts.map(epOf); BTIER = counts.map(c => badgeTier(c / N));
-  HIST = hist; ABOVE = new Float64Array(hist.length + 1);
-  for (let i = hist.length - 1; i >= 0; i--) ABOVE[i] = ABOVE[i + 1] + hist[i];
+  TOTALS = totals; AT_LEAST = new Float64Array(totals.length + 1);
+  for (let i = totals.length - 1; i >= 0; i--) AT_LEAST[i] = AT_LEAST[i + 1] + freq[i];
 }
 const tick = () => new Promise(r => setTimeout(r, 0));
 async function buildStats(onProgress) {
   const cached = store.get(STATS_KEY, null);
-  if (cached && cached.nb === NB && cached.counts.length === NB) { finish(cached.counts, cached.hist); return; }
+  if (cached && cached.nb === NB && cached.counts.length === NB) { finish(cached.counts, cached.totals, cached.freq); return; }
   const CH = 25000;
   const counts = new Array(NB).fill(0), lists = new Array(N);
   for (let a = 0; a < N; a += CH) {
@@ -173,11 +174,12 @@ async function buildStats(onProgress) {
     for (let n = a; n < b; n++) { const l = hits(n).map(h => h[0]); lists[n] = l; for (const i of l) counts[i]++; }
     onProgress && onProgress(a / N * .85); await tick();
   }
-  const ep = counts.map(epOf), hist = new Array(1700).fill(0);
-  for (let n = 0; n < N; n++) hist[BIN(topTotal(lists[n], ep))]++;
+  const ep = counts.map(epOf), byTotal = new Map();
+  for (let n = 0; n < N; n++) { const s = topTotal(lists[n], ep); byTotal.set(s, (byTotal.get(s) || 0) + 1); }
+  const totals = [...byTotal.keys()].sort((a, b) => a - b), freq = totals.map(s => byTotal.get(s));
   onProgress && onProgress(1);
-  store.set(STATS_KEY, { nb: NB, counts, hist });
-  finish(counts, hist);
+  store.set(STATS_KEY, { nb: NB, counts, totals, freq });
+  finish(counts, totals, freq);
 }
 
 function score(n) {
@@ -192,12 +194,14 @@ function score(n) {
     return { i, hl, kids };
   });
   const total = cards.reduce((t, c) => t + EP[c.i], 0);
-  const b = BIN(total);
-  const topFrac = Math.max(1 / N, (ABOVE[b + 1] + HIST[b] / 2) / N);
+  // Top % esatto: quota di tutti i numeri possibili che fanno almeno questi punti.
+  let lo = 0, hi = TOTALS.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (TOTALS[mid] < total) lo = mid + 1; else hi = mid; }
+  const topFrac = AT_LEAST[lo] / N;
   const tier = topFrac > .99 ? 0 : topFrac > .5 ? 1 : topFrac > .25 ? 2 : topFrac > .1 ? 3 : topFrac > .05 ? 4 : topFrac > .01 ? 5 : 6;
   return { n, s: String(n), cards, earned: [...earned], total, topFrac, tier };
 }
-const pctTxt = f => { const p = f * 100; return p.toLocaleString('it-IT', { maximumFractionDigits: p < 1 ? 3 : p < 10 ? 2 : 1 }) + '%'; };
+const pctTxt = f => { const p = f * 100; return (p < 0.01 ? p.toLocaleString('it-IT', { maximumSignificantDigits: 2 }) : p.toLocaleString('it-IT', { maximumFractionDigits: p < 1 ? 3 : p < 10 ? 2 : 1 })) + '%'; };
 
 /* ---------- Casualità ---------- */
 function rollNumber() {
