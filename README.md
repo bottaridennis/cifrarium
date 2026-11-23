@@ -36,7 +36,7 @@ Settings → Pages → Source: **GitHub Actions**.
 ### 3. Firebase Authentication
 Console Firebase → Authentication:
 - Sign-in method → abilita **Google**.
-- Settings → Authorized domains → aggiungi `bottaridennis.github.io`.
+- Settings → Authorized domains → aggiungi `dennisbottari.it` (il dominio su cui GitHub Pages pubblica il sito).
 
 ### 4. Regole e indici di Firestore
 Console Firebase → Firestore → seleziona il database usato dal gioco:
@@ -51,7 +51,7 @@ Console Firebase → Firestore → seleziona il database usato dal gioco:
 ### 5. Proteggere la chiave API
 In un sito web la configurazione Firebase arriva comunque al browser di chi gioca: è normale, ed è così per ogni sito che usa Firebase. A proteggere i dati sono le regole di Firestore. Per evitare che altri usino la tua chiave su altri siti:
 
-Google Cloud Console → API e servizi → Credenziali → la chiave del browser → Restrizioni delle applicazioni → **Referrer HTTP** → aggiungi `https://bottaridennis.github.io/*` (e `https://spheric-splicer-wf4nj.firebaseapp.com/*` per l'accesso Google).
+Google Cloud Console → API e servizi → Credenziali → la chiave del browser → Restrizioni delle applicazioni → **Referrer HTTP** → aggiungi `https://dennisbottari.it/*` (e `https://spheric-splicer-wf4nj.firebaseapp.com/*` per l'accesso Google).
 
 ## Sviluppo in locale
 
@@ -66,3 +66,11 @@ Poi avvia un server qualsiasi nella cartella, per esempio `python3 -m http.serve
 ## Limiti da conoscere
 
 Il numero viene tirato nel browser, quindi un giocatore esperto potrebbe falsificare il proprio tiro. Le regole impediscono di tirare due volte nello stesso giorno o di modificare un tiro già salvato. Per un controllo completo servirebbe una Cloud Function che tira il numero sul server.
+
+## Pubblicare regole e indici da riga di comando
+
+`firebase.json` e `.firebaserc` puntano al progetto e al database del gioco, quindi basta:
+
+```bash
+firebase deploy --only firestore
+```
