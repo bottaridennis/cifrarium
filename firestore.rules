@@ -12,8 +12,12 @@ service cloud.firestore {
         && request.resource.data.username.matches('^[A-Za-z0-9_]{3,20}$')
         && request.resource.data.usernameLower == request.resource.data.username.lower()
         && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.usernameLower)).data.uid == uid;
+      // Nome, data di creazione e codice amico si possono solo aggiungere se mancano, mai cambiare.
       allow update: if isMe(uid)
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['username', 'usernameLower', 'friendCode', 'createdAt']);
+        && (!('username' in resource.data) || request.resource.data.username == resource.data.username)
+        && (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt)
+        && (!('friendCode' in resource.data) || request.resource.data.friendCode == resource.data.friendCode)
+        && (!('usernameLower' in resource.data) || request.resource.data.usernameLower == resource.data.usernameLower);
       allow delete: if isMe(uid);
     }
 

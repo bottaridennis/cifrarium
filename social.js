@@ -24,9 +24,29 @@ const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(6)), x =>
 export function onUser(cb) {
   onAuthStateChanged(auth, async u => {
     me = u; profile = null;
-    if (u) { const s = await getDoc(doc(db, 'users', u.uid)); profile = s.exists() ? s.data() : null; }
+    if (u) {
+      try {
+        const s = await getDoc(doc(db, 'users', u.uid));
+        profile = s.exists() && s.data().username ? await normalize(s.data()) : null;
+      } catch (e) { console.error(e); profile = null; }
+    }
     cb(me, profile);
   });
+}
+// Un profilo creato altrove (o da una versione precedente) può non avere tutti i campi:
+// quelli mancanti prendono un valore predefinito, e il codice amico viene creato se manca.
+const DEFAULTS = { color: '#8c45d4', fav: [], badges: {}, lifetime: 0, rolls: 0, badgeCount: 0, lastDate: '' };
+async function normalize(d) {
+  const p = { ...DEFAULTS, ...d };
+  for (const k of Object.keys(DEFAULTS)) if (p[k] === undefined || p[k] === null) p[k] = DEFAULTS[k];
+  if (!/^#[0-9a-fA-F]{6}$/.test(p.color)) p.color = DEFAULTS.color;
+  if (!Array.isArray(p.fav)) p.fav = [];
+  if (!p.usernameLower) p.usernameLower = String(p.username).toLowerCase();
+  if (!p.friendCode) {
+    p.friendCode = newCode();
+    try { await setDoc(doc(db, 'users', me.uid), { friendCode: p.friendCode, color: p.color, usernameLower: p.usernameLower }, { merge: true }); } catch (e) { console.error(e); }
+  }
+  return p;
 }
 export const login = () => signInWithPopup(auth, new GoogleAuthProvider());
 export const logout = () => signOut(auth);
@@ -43,7 +63,7 @@ export async function createProfile(username) {
   };
   const b = writeBatch(db);
   b.set(doc(db, 'usernames', lower), { uid: me.uid });
-  b.set(doc(db, 'users', me.uid), data);
+  b.set(doc(db, 'users', me.uid), data, { merge: true });
   await b.commit();
   profile = { ...data };
   return profile;
@@ -75,7 +95,7 @@ export async function publishRoll(date, sc, badgeIds, cardIds) {
   const b = writeBatch(db);
   b.set(doc(db, 'rolls', rid), {
     uid: me.uid, date, n: sc.n, total: sc.total, tier: sc.tier, top: sc.topFrac, cards: cardIds.slice(0, 4),
-    username: profile.username, color: profile.color, fav: profile.fav || [], likedBy: [], createdAt: serverTimestamp()
+    username: profile.username, color: profile.color || DEFAULTS.color, fav: profile.fav || [], likedBy: [], createdAt: serverTimestamp()
   });
   const patch = { lifetime: increment(sc.total), rolls: increment(1), badgeCount: Object.keys(badges).length, lastDate: date };
   for (const id of badgeIds) patch[`badges.${id}`] = increment(1);
@@ -150,7 +170,7 @@ export async function sendRequest(to) {
   const back = await getDoc(doc(db, 'friendRequests', `${to.uid}_${me.uid}`));
   if (back.exists()) return acceptRequest(back.data());
   await setDoc(doc(db, 'friendRequests', `${me.uid}_${to.uid}`), {
-    from: me.uid, to: to.uid, fromName: profile.username, fromColor: profile.color, toName: to.username, toColor: to.color || '', createdAt: serverTimestamp()
+    from: me.uid, to: to.uid, fromName: profile.username, fromColor: profile.color || DEFAULTS.color, toName: to.username || '', toColor: to.color || '', createdAt: serverTimestamp()
   });
 }
 export async function acceptRequest(r) {
