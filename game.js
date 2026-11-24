@@ -11,6 +11,17 @@ const store = {
 const comp = new Uint8Array(MAX + 3); comp[0] = comp[1] = 1;
 for (let i = 2; i * i <= MAX + 2; i++) if (!comp[i]) for (let j = i * i; j <= MAX + 2; j += i) comp[j] = 1;
 const isPrime = n => !comp[n];
+// Fattore primo più piccolo di ogni numero, per riconoscere i semiprimi.
+const SPF = new Uint32Array(MAX + 1);
+for (let i = 2; i <= MAX; i++) if (!SPF[i]) for (let j = i; j <= MAX; j += i) if (!SPF[j]) SPF[j] = i;
+const isSemiprime = n => n >= 4 && isPrime(n / SPF[n]);
+// Potenze k^e con k >= 2: per ogni numero, l'esponente più alto con cui si scrive.
+const MAXEXP = new Map();
+for (let k = 2; k * k <= MAX; k++) for (let v = k * k, e = 2; v <= MAX; v *= k, e++) MAXEXP.set(v, Math.max(MAXEXP.get(v) || 0, e));
+const PRONIC = new Set(); for (let k = 0; k * (k + 1) <= MAX; k++) PRONIC.add(k * (k + 1));
+const mult = s => { const c = new Array(10).fill(0); for (let i = 0; i < s.length; i++) c[s.charCodeAt(i) - 48]++; return c; };
+const digitsWithCount = (s, k) => { const c = mult(s), o = []; for (let d = 0; d < 10; d++) if (c[d] === k) o.push(d); return o; };
+const idxOf = (s, ds) => { const set = new Set(ds.map(String)); return ALL(s).filter(i => set.has(s[i])); };
 const isSq = x => { const r = Math.round(Math.sqrt(x)); return r * r === x; };
 const setOf = gen => { const s = new Set(); gen(s); return s; };
 const CUBES = setOf(s => { for (let i = 0; i * i * i <= MAX; i++) s.add(i * i * i); });
@@ -63,6 +74,15 @@ const BADGES = [
   ['gemello', 'Primo gemello', 'È primo, e anche il numero 2 più su o 2 più giù è primo.', (n, s) => yes(isPrime(n) && ((n >= 2 && isPrime(n - 2)) || isPrime(n + 2)), ALL(s)), ['primo']],
   ['quadrato', 'Quadrato perfetto', 'È un numero moltiplicato per sé stesso (k × k).', (n, s) => yes(isSq(n), ALL(s))],
   ['cubo', 'Cubo perfetto', 'È k × k × k.', (n, s) => yes(CUBES.has(n), ALL(s))],
+  ['quarta', 'Quarta potenza', 'È k × k × k × k (es. 81 = 3⁴).', (n, s) => yes((MAXEXP.get(n) || 0) >= 4 && Number.isInteger(Math.round(n ** .25)) && Math.round(n ** .25) ** 4 === n, ALL(s)), ['quadrato']],
+  ['torre', 'Torre di potenze', 'È un numero elevato alla quinta o più (es. 32 = 2⁵).', (n, s) => yes((MAXEXP.get(n) || 0) >= 5, ALL(s))],
+  ['pronico', 'Pronico', 'È il prodotto di due numeri consecutivi (k × (k+1)).', (n, s) => yes(PRONIC.has(n), ALL(s))],
+  ['semiprimo', 'Semiprimo', 'È il prodotto di esattamente due numeri primi.', (n, s) => yes(isSemiprime(n), ALL(s))],
+  ['spia', 'Spia', 'La somma delle cifre è uguale al loro prodotto (es. 123: 1+2+3 = 1×2×3).', (n, s, s6, ds) => {
+    if (s.length < 2) return null; let p = 1; for (const c of s) p *= +c; return yes(p === ds, ALL(s)); }],
+  ['bilancia', 'Bilancia', 'Le due metà hanno la stessa somma di cifre (es. 1423: 1+4 = 2+3).', (n, s) => {
+    if (s.length < 2 || s.length % 2) return null; const h = s.length / 2; let a = 0, b = 0;
+    for (let i = 0; i < h; i++) { a += +s[i]; b += +s[i + h]; } return yes(a === b, ALL(s)); }],
   ['triangolare', 'Triangolare', 'È la somma 1 + 2 + 3 + … + k.', (n, s) => yes(isSq(8 * n + 1), ALL(s))],
   ['fibonacci', 'Fibonacci', 'Fa parte della successione 1, 1, 2, 3, 5, 8, 13…', (n, s) => yes(FIB.has(n), ALL(s))],
   ['pot2', 'Potenza di 2', 'È 2 moltiplicato per sé stesso un certo numero di volte.', (n, s) => yes(POW2.has(n), ALL(s))],
@@ -71,7 +91,7 @@ const BADGES = [
   ['narciso', 'Narcisista', 'È uguale alla somma delle sue cifre elevate al numero di cifre.', (n, s) => {
     if (n < 10) return null; let t = 0; const L = s.length; for (const c of s) t += (+c) ** L; return yes(t === n, ALL(s)); }],
   ['palindromo', 'Palindromo', 'Si legge uguale da sinistra e da destra.', (n, s) => yes(s.length > 1 && s === [...s].reverse().join(''), ALL(s))],
-  ['specchio', 'Specchio', 'Le prime tre cifre si ripetono uguali (abc abc).', (n, s) => yes(s.length === 6 && s.slice(0, 3) === s.slice(3), ALL(s))],
+  ['specchio', 'Specchio', 'La prima metà si ripete uguale nella seconda (es. 4545 o 123123).', (n, s) => yes(s.length >= 2 && s.length % 2 === 0 && s.slice(0, s.length / 2) === s.slice(s.length / 2), ALL(s)), ['bilancia']],
   ['capovolto', 'Capovolgibile', 'Girando il numero di 180° si legge uguale.', (n, s) => {
     if (s.length < 2) return null; let r = ''; for (let i = s.length - 1; i >= 0; i--) { const m = STROBO[s[i]]; if (!m) return null; r += m; } return yes(r === s, ALL(s)); }],
   ['mono', 'Monocromo', 'Tutte le cifre sono uguali.', (n, s) => yes(s.length > 1 && sameRuns(s, s.length).length === 1, ALL(s)), ['palindromo', 'cinquina', 'poker', 'tris', 'doppietta']],
@@ -84,6 +104,13 @@ const BADGES = [
     const r = sameRuns(s, 2); return r.length >= 2 && r.some(x => x.length >= 3) ? r.flat() : null; }, ['tris', 'doppiacoppia']],
   ['poker', 'Poker', 'Quattro cifre uguali di fila.', (n, s) => { const r = sameRuns(s, 4); return r.length ? r[0] : null; }, ['tris']],
   ['cinquina', 'Cinquina', 'Cinque cifre uguali di fila.', (n, s) => { const r = sameRuns(s, 5); return r.length ? r[0] : null; }, ['poker']],
+  ['terzetto', 'Terzetto', 'Una cifra compare esattamente tre volte, anche sparsa.', (n, s) => { const d = digitsWithCount(s, 3); return d.length ? idxOf(s, d.slice(0, 1)) : null; }, ['ripetuta']],
+  ['quaterna', 'Quaterna', 'Una cifra compare almeno quattro volte, anche sparsa.', (n, s) => {
+    const c = mult(s); for (let d = 0; d < 10; d++) if (c[d] >= 4) return idxOf(s, [d]); return null; }, ['ripetuta']],
+  ['duecoppie', 'Due coppie', 'Due cifre diverse compaiono esattamente due volte ciascuna.', (n, s) => { const d = digitsWithCount(s, 2); return d.length >= 2 ? idxOf(s, d) : null; }, ['ripetuta']],
+  ['trecoppie', 'Tre coppie', 'Tre cifre diverse compaiono esattamente due volte ciascuna.', (n, s) => { const d = digitsWithCount(s, 2); return d.length >= 3 ? idxOf(s, d) : null; }, ['duecoppie']],
+  ['casa', 'Casa piena', 'Una cifra compare tre volte e un\'altra due volte, come un full a poker.', (n, s) => {
+    const a = digitsWithCount(s, 3), b = digitsWithCount(s, 2); return a.length && b.length ? idxOf(s, [a[0], b[0]]) : null; }, ['terzetto']],
   ['doppioasso', 'Doppio asso', 'Esattamente due 1 e nessun\'altra cifra ripetuta.', (n, s) => {
     const c = digitCount(s); if (c[1] !== 2) return null; for (let d = 0; d < 10; d++) if (d !== 1 && c[d] > 1) return null;
     return ALL(s).filter(i => s[i] === '1'); }, ['ripetuta']],
@@ -147,7 +174,7 @@ function hits(n) {
 }
 
 /* ---------- Statistiche su tutti i numeri ---------- */
-const STATS_KEY = 'cifrario_stats_v3';
+const STATS_KEY = 'cifrario_stats_v4';
 // Distribuzione esatta dei punteggi: TOTALS = punteggi distinti in ordine crescente,
 // AT_LEAST[i] = quanti numeri fanno almeno TOTALS[i] punti.
 let EP = [], BTIER = [], COUNTS = [], TOTALS = null, AT_LEAST = null;
